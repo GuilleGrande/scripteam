@@ -1,0 +1,112 @@
+name: 🌐 Web App Deploy
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'apps/web/**'
+      - 'packages/shared/**'
+      - '.github/workflows/web-deploy.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/web/**'
+      - 'packages/shared/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-build:
+    name: 🧪 Test & Build Web App
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📚 Checkout
+        uses: actions/checkout@v4
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 📥 Install dependencies
+        run: npm ci
+
+      - name: 🔧 Build shared packages
+        run: npm run build --workspace=packages/shared
+
+      - name: 🧪 Run tests
+        run: npm run test --workspace=apps/web
+
+      - name: ✅ TypeScript check
+        run: npm run typecheck --workspace=apps/web
+
+      - name: 🎨 Lint check
+        run: npm run lint --workspace=apps/web
+
+      - name: 🏗️ Build web app
+        run: npm run build --workspace=apps/web
+        env:
+          VITE_API_URL: ${{ github.ref == 'refs/heads/main' && 'https://api.scripteam.bigapps.dev' || 'https://api.staging.scripteam.bigapps.dev' }}
+
+      - name: 📤 Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-build-${{ github.sha }}
+          path: apps/web/dist/
+          retention-days: 7
+
+  deploy-staging:
+    name: 🚀 Deploy to Staging
+    needs: test-and-build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop'
+    environment: staging
+
+    steps:
+      - name: 📥 Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: web-build-${{ github.sha }}
+          path: ./dist
+
+      - name: 🚀 Deploy to Hostinger Staging
+        run: |
+          echo "🚀 Deploying to staging environment..."
+          # Add your Hostinger deployment commands here
+          # Example: rsync, SCP, or Hostinger-specific deployment
+        env:
+          HOSTINGER_STAGING_HOST: ${{ secrets.HOSTINGER_STAGING_HOST }}
+          HOSTINGER_USERNAME: ${{ secrets.HOSTINGER_USERNAME }}
+          HOSTINGER_PASSWORD: ${{ secrets.HOSTINGER_PASSWORD }}
+
+  deploy-production:
+    name: 🏭 Deploy to Production
+    needs: test-and-build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment: production
+
+    steps:
+      - name: 📥 Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: web-build-${{ github.sha }}
+          path: ./dist
+
+      - name: 🏭 Deploy to Hostinger Production
+        run: |
+          echo "🏭 Deploying to production environment..."
+          # Add your Hostinger production deployment commands here
+        env:
+          HOSTINGER_PROD_HOST: ${{ secrets.HOSTINGER_PROD_HOST }}
+          HOSTINGER_USERNAME: ${{ secrets.HOSTINGER_USERNAME }}
+          HOSTINGER_PASSWORD: ${{ secrets.HOSTINGER_PASSWORD }}
+
+      - name: 📊 Notify deployment success
+        run: |
+          echo "✅ Web app successfully deployed to production"
+          # Add notification logic (Slack, Discord, etc.)

@@ -1,0 +1,83 @@
+name: 📦 Shared Package Validation
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'packages/shared/**'
+      - '.github/workflows/shared-validation.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'packages/shared/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-shared:
+    name: ✅ Validate Shared Package
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📚 Checkout
+        uses: actions/checkout@v4
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 📥 Install dependencies
+        run: npm ci
+
+      - name: ✅ TypeScript check
+        run: npm run typecheck --workspace=packages/shared
+
+      - name: 🏗️ Build shared package
+        run: npm run build --workspace=packages/shared
+
+      - name: 🧪 Test shared package
+        run: npm run test --workspace=packages/shared --if-present
+
+      - name: 📤 Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: shared-build-${{ github.sha }}
+          path: packages/shared/dist/
+          retention-days: 7
+
+  validate-dependents:
+    name: 🔗 Validate Package Dependents
+    needs: validate-shared
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        workspace: ['apps/web', 'apps/api']
+
+    steps:
+      - name: 📚 Checkout
+        uses: actions/checkout@v4
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 📥 Install dependencies
+        run: npm ci
+
+      - name: 📥 Download shared build
+        uses: actions/download-artifact@v4
+        with:
+          name: shared-build-${{ github.sha }}
+          path: packages/shared/dist/
+
+      - name: ✅ TypeScript check dependent workspace
+        run: npm run typecheck --workspace=${{ matrix.workspace }} --if-present
+
+      - name: 🏗️ Build dependent workspace
+        run: npm run build --workspace=${{ matrix.workspace }} --if-present

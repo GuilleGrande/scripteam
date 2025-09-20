@@ -1,0 +1,159 @@
+# Development Docker Compose Configuration
+# Based on architecture/docker-architecture.md
+
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: scripteam-postgres-dev
+    environment:
+      POSTGRES_DB: scripteam_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./apps/api/database/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d scripteam_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: scripteam-redis-dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # n8n Workflow Engine
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: scripteam-n8n-dev
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_AUTH_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_AUTH_PASSWORD:-password}
+      - N8N_HOST=${N8N_HOST:-localhost}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=Europe/Madrid
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n/workflows:/home/node/.n8n/workflows
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5678/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # API Backend (when implemented)
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: development
+    container_name: scripteam-api-dev
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/scripteam_dev
+      - REDIS_URL=redis://redis:6379
+      - N8N_BASE_URL=http://n8n:5678
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-key}
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
+      - PLAYHT_API_KEY=${PLAYHT_API_KEY}
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./apps/api:/app
+      - ./packages/shared:/shared
+      - upload_data:/app/uploads
+      - ./logs:/app/logs
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    profiles:
+      - api
+
+  # GPT-OSS Container (when implemented)
+  gpt-oss:
+    image: ghcr.io/scripteam/gpt-oss:latest
+    container_name: scripteam-gpt-oss-dev
+    environment:
+      - MODEL_PATH=/models
+      - API_PORT=8080
+      - MAX_WORKERS=2
+    ports:
+      - "8080:8080"
+    volumes:
+      - gpt_models:/models
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+    restart: unless-stopped
+    profiles:
+      - ai
+
+  # Nginx Reverse Proxy (for production-like testing)
+  nginx:
+    image: nginx:alpine
+    container_name: scripteam-nginx-dev
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/dev.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - upload_data:/var/www/uploads:ro
+    depends_on:
+      - api
+    restart: unless-stopped
+    profiles:
+      - nginx
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  n8n_data:
+    driver: local
+  upload_data:
+    driver: local
+  gpt_models:
+    driver: local
+
+networks:
+  default:
+    name: scripteam-dev-network
