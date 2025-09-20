@@ -1,4 +1,4 @@
-# 🎭 ScripTeam POC
+# 🎭 ScripTeam
 
 AI-powered acting practice platform with Spanish/English language support
 
@@ -41,7 +41,7 @@ docker-compose -f docker-compose.prod.yml up -d
 ## 📁 Project Structure
 
 ```
-scripteam-poc/
+scripteam/
 ├── apps/
 │   ├── web/                    # React web app
 │   ├── api/                    # Express.js backend (future)
