@@ -1,0 +1,64 @@
+# Node modules
+node_modules/
+*/node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+build/
+.expo/
+coverage/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Cache directories
+.npm/
+.cache/
+.parcel-cache/
+
+# Git
+.git/
+.gitignore
+
+# Environment files
+.env.local
+.env.*.local
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Docker files
+Dockerfile*
+docker-compose*.yml
+
+# Testing
+jest.config.js
+*.test.js
+*.test.ts
+*.spec.js
+*.spec.ts
+__tests__/
+
+# Documentation
+*.md
+docs/
+
+# Temporary files
+*.tmp
+*.temp

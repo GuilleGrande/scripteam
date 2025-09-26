@@ -1,25 +1,23 @@
-# Development Docker Compose Configuration
-# Based on architecture/docker-architecture.md
-
-version: '3.8'
+# Testing Docker Compose Configuration
+# Simplified setup for testing Story 1.2 progress
+# Usage: docker-compose -f docker-compose.test.yml up
 
 services:
   # PostgreSQL Database
   postgres:
     image: postgres:15-alpine
-    container_name: scripteam-postgres-dev
+    container_name: scripteam-postgres-test
     environment:
-      POSTGRES_DB: scripteam_dev
+      POSTGRES_DB: scripteam_test
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_PASSWORD: postgres
       PGDATA: /var/lib/postgresql/data/pgdata
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./apps/api/database/init:/docker-entrypoint-initdb.d
+      - postgres_test_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d scripteam_dev"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d scripteam_test"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -28,11 +26,11 @@ services:
   # Redis Cache
   redis:
     image: redis:7-alpine
-    container_name: scripteam-redis-dev
+    container_name: scripteam-redis-test
     ports:
       - "6379:6379"
     volumes:
-      - redis_data:/data
+      - redis_test_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -40,120 +38,63 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # n8n Workflow Engine
-  n8n:
-    image: n8nio/n8n:latest
-    container_name: scripteam-n8n-dev
-    environment:
-      - N8N_BASIC_AUTH_ACTIVE=true
-      - N8N_BASIC_AUTH_USER=${N8N_AUTH_USER:-admin}
-      - N8N_BASIC_AUTH_PASSWORD=${N8N_AUTH_PASSWORD:-password}
-      - N8N_HOST=${N8N_HOST:-localhost}
-      - N8N_PORT=5678
-      - N8N_PROTOCOL=http
-      - WEBHOOK_URL=http://localhost:5678/
-      - GENERIC_TIMEZONE=Europe/Madrid
-    ports:
-      - "5678:5678"
-    volumes:
-      - n8n_data:/home/node/.n8n
-      - ./n8n/workflows:/home/node/.n8n/workflows
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5678/healthz"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    restart: unless-stopped
-
-  # API Backend (when implemented)
+  # API Backend
   api:
     build:
       context: .
-      dockerfile: apps/api/Dockerfile
-      target: development
-    container_name: scripteam-api-dev
+      dockerfile: apps/api/Dockerfile.simple
+    container_name: scripteam-api-test
     environment:
       - NODE_ENV=development
-      - PORT=3000
-      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/scripteam_dev
+      - PORT=3001
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/scripteam_test
       - REDIS_URL=redis://redis:6379
-      - N8N_BASE_URL=http://n8n:5678
-      - JWT_SECRET=${JWT_SECRET:-dev-secret-key}
-      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
-      - PLAYHT_API_KEY=${PLAYHT_API_KEY}
+      - JWT_SECRET=test-secret-key
+      - CORS_ORIGIN=http://localhost:8081
     ports:
-      - "3000:3000"
+      - "3001:3001"
     volumes:
-      - ./apps/api:/app
-      - ./packages/shared:/shared
-      - upload_data:/app/uploads
-      - ./logs:/app/logs
-      - /app/node_modules
+      - ./apps/api/src:/app/apps/api/src
+      - ./packages/shared:/app/packages/shared
+      - upload_test_data:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ["CMD-SHELL", "curl -f http://localhost:3001/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
     restart: unless-stopped
-    profiles:
-      - api
 
-  # GPT-OSS Container (when implemented)
-  gpt-oss:
-    image: ghcr.io/scripteam/gpt-oss:latest
-    container_name: scripteam-gpt-oss-dev
+  # Mobile/Web Frontend (Expo Web)
+  mobile:
+    build:
+      context: .
+      dockerfile: apps/mobile/Dockerfile.simple
+    container_name: scripteam-mobile-test
     environment:
-      - MODEL_PATH=/models
-      - API_PORT=8080
-      - MAX_WORKERS=2
+      - EXPO_PUBLIC_API_URL=http://localhost:3001/api
+      - NODE_ENV=development
     ports:
-      - "8080:8080"
+      - "8081:8081"
     volumes:
-      - gpt_models:/models
-      - ./logs:/app/logs
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 60s
-      timeout: 30s
-      retries: 3
+      - ./apps/mobile/src:/app/apps/mobile/src
+      - ./apps/mobile/assets:/app/apps/mobile/assets
     restart: unless-stopped
-    profiles:
-      - ai
-
-  # Nginx Reverse Proxy (for production-like testing)
-  nginx:
-    image: nginx:alpine
-    container_name: scripteam-nginx-dev
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/dev.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
-      - upload_data:/var/www/uploads:ro
     depends_on:
       - api
-    restart: unless-stopped
-    profiles:
-      - nginx
 
 volumes:
-  postgres_data:
+  postgres_test_data:
     driver: local
-  redis_data:
+  redis_test_data:
     driver: local
-  n8n_data:
-    driver: local
-  upload_data:
-    driver: local
-  gpt_models:
+  upload_test_data:
     driver: local
 
 networks:
   default:
-    name: scripteam-dev-network
+    name: scripteam-test-network

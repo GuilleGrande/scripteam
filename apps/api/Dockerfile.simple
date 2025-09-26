@@ -1,0 +1,29 @@
+# Simple API Dockerfile for testing
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install tsx globally for development
+RUN npm install -g tsx
+
+# Copy and modify package.json to remove file: dependency
+COPY apps/api/package.json ./apps/api/package.json
+RUN cd apps/api && sed -i 's/"@scripteam\/shared": "file:.*"/"@scripteam\/shared": "*"/' package.json || true
+
+# Copy shared package and install it
+COPY packages/shared ./packages/shared
+WORKDIR /app/packages/shared
+RUN npm install && npm run build 2>/dev/null || echo "No build script"
+
+# Install API dependencies
+WORKDIR /app/apps/api
+RUN npm install
+
+# Copy API source code
+COPY apps/api/src ./src
+
+# Expose port
+EXPOSE 3001
+
+# Start development server
+CMD ["npm", "run", "dev"]
