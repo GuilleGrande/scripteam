@@ -1,23 +1,23 @@
-# Testing Docker Compose Configuration
-# Simplified setup for testing Story 1.2 progress
-# Usage: docker-compose -f docker-compose.test.yml up
+# ScripTeam Development Docker Compose Configuration
+# Complete setup for React web PoC development
+# Usage: docker-compose up -d
 
 services:
   # PostgreSQL Database
   postgres:
     image: postgres:15-alpine
-    container_name: scripteam-postgres-test
+    container_name: scripteam-postgres
     environment:
-      POSTGRES_DB: scripteam_test
+      POSTGRES_DB: scripteam
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       PGDATA: /var/lib/postgresql/data/pgdata
     ports:
       - "5432:5432"
     volumes:
-      - postgres_test_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d scripteam_test"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d scripteam"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -26,11 +26,11 @@ services:
   # Redis Cache
   redis:
     image: redis:7-alpine
-    container_name: scripteam-redis-test
+    container_name: scripteam-redis
     ports:
       - "6379:6379"
     volumes:
-      - redis_test_data:/data
+      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -43,20 +43,20 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile.simple
-    container_name: scripteam-api-test
+    container_name: scripteam-api
     environment:
       - NODE_ENV=development
       - PORT=3001
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/scripteam_test
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/scripteam
       - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=test-secret-key
-      - CORS_ORIGIN=http://localhost:8081
+      - JWT_SECRET=dev-secret-key
+      - CORS_ORIGIN=http://localhost:5173
     ports:
       - "3001:3001"
     volumes:
       - ./apps/api/src:/app/apps/api/src
       - ./packages/shared:/app/packages/shared
-      - upload_test_data:/app/uploads
+      - upload_data:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -69,32 +69,33 @@ services:
       retries: 3
     restart: unless-stopped
 
-  # Mobile/Web Frontend (Expo Web)
-  mobile:
+  # React Web Frontend
+  web:
     build:
-      context: .
-      dockerfile: apps/mobile/Dockerfile.simple
-    container_name: scripteam-mobile-test
+      context: apps/web
+      dockerfile: Dockerfile.dev
+    container_name: scripteam-web
     environment:
-      - EXPO_PUBLIC_API_URL=http://localhost:3001/api
+      - VITE_API_URL=http://localhost:3001
       - NODE_ENV=development
     ports:
-      - "8081:8081"
+      - "5173:5173"
     volumes:
-      - ./apps/mobile/src:/app/apps/mobile/src
-      - ./apps/mobile/assets:/app/apps/mobile/assets
+      - ./apps/web/src:/app/src
+      - ./apps/web/public:/app/public
+      - ./apps/web/index.html:/app/index.html
     restart: unless-stopped
     depends_on:
       - api
 
 volumes:
-  postgres_test_data:
+  postgres_data:
     driver: local
-  redis_test_data:
+  redis_data:
     driver: local
-  upload_test_data:
+  upload_data:
     driver: local
 
 networks:
   default:
-    name: scripteam-test-network
+    name: scripteam-network
