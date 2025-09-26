@@ -1,3 +1,0 @@
-CHARACTER 1: Hello, this is a test script for ScripTeam.
-CHARACTER 2: Yes, let's see if the file upload works correctly.
-CHARACTER 1: Great! This should test the PDF processing functionality.

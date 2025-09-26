@@ -1,2 +1,0 @@
-CHARACTER 1: New test script.
-CHARACTER 2: This should work now.

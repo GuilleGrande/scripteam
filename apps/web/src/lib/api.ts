@@ -36,7 +36,7 @@ export class ApiClient {
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await fetch(`${this.baseUrl}/scripts`, {
+    const response = await fetch(`${this.baseUrl}/api/scripts`, {
       method: 'POST',
       body: formData,
     });
@@ -50,7 +50,7 @@ export class ApiClient {
 
   // Get script by ID
   async getScript(id: string) {
-    return this.request(`/scripts/${id}`);
+    return this.request(`/api/scripts/${id}`);
   }
 }
 

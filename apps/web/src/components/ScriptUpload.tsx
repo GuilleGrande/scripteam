@@ -6,6 +6,8 @@ import { Upload, FileText, CheckCircle, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AIProcessingProgress, ProcessingPhase } from '@/lib/types';
 import { processingPhases } from '@/lib/mock-data';
+import { apiClient } from '@/lib/api';
+import { toast } from '@/hooks/use-toast';
 
 interface ScriptUploadProps {
   onUploadComplete: () => void;
@@ -48,8 +50,29 @@ const ScriptUpload = ({ onUploadComplete }: ScriptUploadProps) => {
     startProcessing();
   };
 
-  const startProcessing = () => {
+  const startProcessing = async () => {
+    if (!uploadedFile) return;
+
     setIsProcessing(true);
+
+    // Upload file to API
+    try {
+      const uploadResult = await apiClient.uploadScript(uploadedFile);
+      console.log('✅ Upload successful:', uploadResult);
+      toast({
+        title: "Upload started",
+        description: `Processing ${uploadedFile.name}...`,
+      });
+    } catch (error) {
+      console.error('❌ Upload failed:', error);
+      setIsProcessing(false);
+      toast({
+        title: "Upload failed",
+        description: error instanceof Error ? error.message : "Failed to upload script",
+        variant: "destructive",
+      });
+      return;
+    }
     let currentPhaseIndex = 0;
     let currentProgress = 0;
 
