@@ -17,25 +17,40 @@ This is a **monorepo** containing:
 
 ## 🚀 Quick Start
 
-### Development
+### Development with Docker (Recommended)
+
+```bash
+# Start full stack (PostgreSQL + Redis + API + Web)
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop all services
+docker-compose down
+
+# Run comprehensive test
+./test-docker-setup.sh
+```
+
+**Access Points:**
+- Web App: http://localhost:5173
+- API Test Page: http://localhost:5173/api-test
+- API Health: http://localhost:3001/health
+- PostgreSQL: localhost:5432
+- Redis: localhost:6379
+
+### Local Development (Alternative)
 
 ```bash
 # Install dependencies
 npm install
 
-# Start web app
+# Start API backend
+npm run dev:api
+
+# Start web app (in another terminal)
 npm run dev:web
-
-# Start with Docker (full stack)
-docker-compose up -d postgres redis n8n
-npm run dev:web
-```
-
-### Production Deployment
-
-```bash
-# Deploy to production
-docker-compose -f docker-compose.prod.yml up -d
 ```
 
 ## 📁 Project Structure
@@ -43,16 +58,17 @@ docker-compose -f docker-compose.prod.yml up -d
 ```
 scripteam/
 ├── apps/
-│   ├── web/                    # React web app
-│   ├── api/                    # Express.js backend (future)
-│   └── mobile/                 # React Native app (future)
+│   ├── web/                    # React web app (Vite + ShadCN/UI)
+│   └── api/                    # Express.js backend (complete)
 ├── packages/
 │   └── shared/                 # Shared TypeScript types
-├── .github/workflows/          # CI/CD pipelines
-├── nginx/                      # Reverse proxy config
-├── docker-compose.yml          # Development environment
-├── docker-compose.prod.yml     # Production environment
-└── docs/                       # Architecture & stories
+├── docs/
+│   ├── architecture/           # Technical documentation
+│   ├── stories/                # Story-driven development
+│   └── qa/                     # Quality assurance
+├── docker-compose.yml          # Full-stack development
+├── test-docker-setup.sh        # Comprehensive testing
+└── .github/workflows/          # CI/CD pipelines
 ```
 
 ## 🌐 Subdomains (bigapps.dev)
@@ -143,29 +159,29 @@ docker-compose -f docker-compose.prod.yml up -d --remove-orphans
 
 ## 📋 Current Status
 
-### ✅ Completed
-- [x] Monorepo structure with workspaces
-- [x] Complete React web app with ShadCN/UI (from Lovable PoC)
-- [x] Express.js API backend with full functionality
-- [x] Script upload and PDF processing
-- [x] PostgreSQL database schema with fallback
-- [x] File storage and validation system
-- [x] Docker development environment
-- [x] GitHub Actions CI/CD pipelines
-- [x] Complete UI workflow: Upload → Character Selection → Practice
+### ✅ Completed (Ready for Development)
+- [x] **Full-stack architecture** with Docker orchestration
+- [x] **React web app** with ShadCN/UI from Lovable PoC
+- [x] **Express.js API backend** with complete functionality
+- [x] **Script upload and PDF processing** (Story 1.1)
+- [x] **PostgreSQL database** schema with graceful fallback
+- [x] **File storage and validation** system with security
+- [x] **Docker development environment** with hot reloading
+- [x] **API connectivity** verified between web ↔ API services
+- [x] **Complete UI workflow**: Upload → Character Selection → Practice
+- [x] **Testing infrastructure** with automated setup scripts
 
-### 🚧 In Progress
-- [ ] Voice synthesis integration (ElevenLabs/PlayHT)
-- [ ] Real-time practice session functionality
-- [ ] AI character voice generation
-- [ ] Scene analysis and character detection
+### 🎯 Ready to Implement (Stories 2.2-2.5)
+- [ ] **Script analysis and character detection** (Story 2.2)
+- [ ] **Voice synthesis integration** ElevenLabs/PlayHT (Story 2.3)
+- [ ] **Interactive practice sessions** with AI voices (Story 2.4)
+- [ ] **Quick response and feedback** system (Story 2.5)
 
-### 📋 Next Phase
-- [ ] Complete PoC user testing
-- [ ] Voice API integration
-- [ ] Advanced practice features (timing, feedback)
-- [ ] User authentication system
-- [ ] Progress tracking and analytics
+### 🚀 Next Development Phase
+- [ ] Character personality analysis from script text
+- [ ] Voice API integration with character mapping
+- [ ] Real-time practice session engine
+- [ ] Performance feedback and progress tracking
 
 ## 🏃‍♂️ Story Development
 
