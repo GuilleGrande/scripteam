@@ -6,17 +6,16 @@ WORKDIR /app
 # Install tsx globally for development
 RUN npm install -g tsx
 
-# Copy and modify package.json to remove file: dependency
-COPY apps/api/package.json ./apps/api/package.json
-RUN cd apps/api && sed -i 's/"@scripteam\/shared": "file:.*"/"@scripteam\/shared": "*"/' package.json || true
-
-# Copy shared package and install it
+# Copy shared package first
 COPY packages/shared ./packages/shared
 WORKDIR /app/packages/shared
-RUN npm install && npm run build 2>/dev/null || echo "No build script"
+RUN npm install 2>/dev/null || echo "No shared dependencies to install"
 
-# Install API dependencies
+# Copy API package.json and install dependencies
 WORKDIR /app/apps/api
+COPY apps/api/package.json ./package.json
+
+# Install API dependencies (file: reference will work now)
 RUN npm install
 
 # Copy API source code
