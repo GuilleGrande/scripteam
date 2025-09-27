@@ -1,0 +1,95 @@
+{
+  "name": "Script Processing Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "script-processing",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Script Upload Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "script-processing-webhook"
+    },
+    {
+      "parameters": {
+        "url": "http://api:3001/internal/extract-text",
+        "method": "POST",
+        "body": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "extract-pdf-text",
+      "name": "Extract PDF Text",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "operation": "create",
+        "model": "gpt-4",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are a script analysis expert. Extract character information from this script text and return ONLY valid JSON in this exact format:\n{\n  \"characters\": [\n    {\n      \"name\": \"CHARACTER_NAME\",\n      \"lineCount\": number,\n      \"personalityTraits\": [\"trait1\", \"trait2\"],\n      \"emotionalRange\": [\"emotion1\", \"emotion2\"],\n      \"age\": \"young/middle/older\",\n      \"gender\": \"male/female/neutral\"\n    }\n  ]\n}\n\nAnalyze the script for:\n1. Character names (usually in CAPS before dialogue)\n2. Approximate line count per character\n3. Personality traits from dialogue style\n4. Emotional range from context\n5. Estimated age and gender\n\nReturn only the JSON, no other text."
+          },
+          {
+            "role": "user",
+            "content": "={{ $json.extractedText }}"
+          }
+        ],
+        "temperature": 0.1,
+        "maxTokens": 2000
+      },
+      "id": "detect-characters",
+      "name": "Detect Characters",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Map character traits to ElevenLabs voice parameters\ntry {\n  const charactersData = JSON.parse($input.first().json.message.content);\n  const scriptId = $('webhook-trigger').first().json.scriptId;\n  \n  const voiceMapping = charactersData.characters.map(char => {\n    // Voice parameter mapping based on character analysis\n    let stability = 0.5; // Default\n    let similarityBoost = 0.75;\n    let style = 0.4;\n    \n    // Adjust based on personality traits\n    if (char.personalityTraits.includes('calm') || char.personalityTraits.includes('wise')) {\n      stability = 0.8;\n    }\n    if (char.personalityTraits.includes('dramatic') || char.personalityTraits.includes('passionate')) {\n      style = 0.8;\n    }\n    if (char.personalityTraits.includes('nervous') || char.personalityTraits.includes('excited')) {\n      stability = 0.3;\n    }\n    \n    return {\n      name: char.name,\n      characterData: char,\n      voiceParams: {\n        stability: stability,\n        similarity_boost: similarityBoost,\n        style: style\n      },\n      sampleText: `Hello, I am ${char.name}. This is a voice sample for character identification.`\n    };\n  });\n  \n  return [{\n    json: {\n      scriptId: scriptId,\n      characters: charactersData.characters,\n      voiceMapping: voiceMapping,\n      totalCharacters: voiceMapping.length\n    }\n  }];\n} catch (error) {\n  console.error('Error parsing character data:', error);\n  return [{\n    json: {\n      error: 'Failed to parse character data',\n      scriptId: $('webhook-trigger').first().json.scriptId\n    }\n  }];\n}"
+      },
+      "id": "map-voice-parameters",
+      "name": "Map Voice Parameters",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {
+          "reset": false
+        }
+      },
+      "id": "generate-voices-parallel",
+      "name": "Process Characters",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM",
+        "method": "POST",
+        "headers": {
+          "xi-api-key": "={{ $credentials.elevenLabsApi.apiKey }}",
+          "Content-Type": "application/json"
+        },
+        "body": "json",
+        "jsonBody": "={\n  \"text\": \"{{ $json.sampleText }}\",\n  \"model_id\": \"eleven_flash_v2_5\",\n  \"voice_settings\": {{ JSON.stringify($json.voiceParams) }}\n}",
+        "options": {
+          "responseFormat": "file",\n          "timeout": 30000\n        }\n      },\n      \"id\": \"elevenlabs-voice-gen\",\n      \"name\": \"Generate Voice Sample\",\n      \"type\": \"n8n-nodes-base.httpRequest\",\n      \"typeVersion\": 4.1,\n      \"position\": [1340, 300]\n    },\n    {\n      \"parameters\": {\n        \"operation\": \"set\",\n        \"key\": \"=voice:{{ $('map-voice-parameters').first().json.scriptId }}:{{ $json.name }}\",\n        \"value\": \"={{ JSON.stringify({ voiceParams: $json.voiceParams, characterData: $json.characterData, audioGenerated: true, timestamp: new Date().toISOString() }) }}\",\n        \"ttl\": 604800\n      },\n      \"id\": \"cache-voice-redis\",\n      \"name\": \"Cache Voice Profile\",\n      \"type\": \"n8n-nodes-base.redis\",\n      \"typeVersion\": 1,\n      \"position\": [1560, 300]\n    },\n    {\n      \"parameters\": {\n        \"url\": \"http://api:3001/webhooks/script-processing-complete\",\n        \"method\": \"POST\",\n        \"body\": \"json\",\n        \"jsonBody\": \"={\n  \\\"scriptId\\\": \\\"{{ $('webhook-trigger').first().json.scriptId }}\\\",\n  \\\"status\\\": \\\"complete\\\",\n  \\\"characters\\\": {{ JSON.stringify($('map-voice-parameters').first().json.characters) }},\n  \\\"voiceFilesGenerated\\\": {{ $('generate-voices-parallel').first().json.totalCharacters }},\n  \\\"completedAt\\\": \\\"{{ new Date().toISOString() }}\\\"\n}\",\n        \"headers\": {\n          \"Content-Type\": \"application/json\"\n        }\n      },\n      \"id\": \"webhook-response\",\n      \"name\": \"Notify Completion\",\n      \"type\": \"n8n-nodes-base.httpRequest\",\n      \"typeVersion\": 4.1,\n      \"position\": [1780, 300],\n      \"alwaysOutputData\": true\n    }\n  ],\n  \"connections\": {\n    \"webhook-trigger\": {\n      \"main\": [[\n        {\n          \"node\": \"extract-pdf-text\",\n          \"type\": \"main\",\n          \"index\": 0\n        }\n      ]]\n    },\n    \"extract-pdf-text\": {\n      \"main\": [[\n        {\n          \"node\": \"detect-characters\",\n          \"type\": \"main\",\n          \"index\": 0\n        }\n      ]]\n    },\n    \"detect-characters\": {\n      \"main\": [[\n        {\n          \"node\": \"map-voice-parameters\",\n          \"type\": \"main\",\n          \"index\": 0\n        }\n      ]]\n    },\n    \"map-voice-parameters\": {\n      \"main\": [[\n        {\n          \"node\": \"generate-voices-parallel\",\n          \"type\": \"main\",\n          \"index\": 0\n        }\n      ]]\n    },\n    \"generate-voices-parallel\": {\n      \"main\": [[\n        {\n          \"node\": \"elevenlabs-voice-gen\",\n          \"type\": \"main\",\n          \"index\": 0\n        }\n      ]]\n    },\n    \"elevenlabs-voice-gen\": {\n      \"main\": [[\n        {\n          \"node\": \"cache-voice-redis\",\n          \"type\": \"main\",\n          \"index\": 0\n        }\n      ]]\n    },\n    \"cache-voice-redis\": {\n      \"main\": [[\n        {\n          \"node\": \"webhook-response\",\n          \"type\": \"main\",\n          \"index\": 0\n        }\n      ]]\n    }\n  },\n  \"createdAt\": \"2025-09-26T00:00:00.000Z\",\n  \"id\": \"script-processing-pipeline\",\n  \"meta\": {\n    \"templateCredsSetupCompleted\": true\n  },\n  \"tags\": [\n    {\n      \"createdAt\": \"2025-09-26T00:00:00.000Z\",\n      \"id\": \"ai-processing\",\n      \"name\": \"AI Processing\",\n      \"updatedAt\": \"2025-09-26T00:00:00.000Z\"\n    }\n  ],\n  \"updatedAt\": \"2025-09-26T00:00:00.000Z\",\n  \"versionId\": \"1\"\n}

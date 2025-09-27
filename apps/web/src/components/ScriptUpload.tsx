@@ -42,29 +42,32 @@ const ScriptUpload = ({ onUploadComplete }: ScriptUploadProps) => {
   const handleFileSelection = (file: File) => {
     const validTypes = ['text/plain', 'application/pdf'];
     if (!validTypes.includes(file.type)) {
-      alert('Please upload a PDF or TXT file');
+      toast({
+        title: "Invalid file type",
+        description: "Please upload a PDF or TXT file",
+        variant: "destructive",
+      });
       return;
     }
-    
+
     setUploadedFile(file);
-    startProcessing();
+    startProcessing(file);
   };
 
-  const startProcessing = async () => {
-    if (!uploadedFile) return;
+  const startProcessing = async (file?: File) => {
+    const fileToProcess = file || uploadedFile;
+    if (!fileToProcess) return;
 
     setIsProcessing(true);
 
     // Upload file to API
     try {
-      const uploadResult = await apiClient.uploadScript(uploadedFile);
-      console.log('✅ Upload successful:', uploadResult);
+      const uploadResult = await apiClient.uploadScript(fileToProcess);
       toast({
         title: "Upload started",
-        description: `Processing ${uploadedFile.name}...`,
+        description: `Processing ${fileToProcess.name}...`,
       });
     } catch (error) {
-      console.error('❌ Upload failed:', error);
       setIsProcessing(false);
       toast({
         title: "Upload failed",

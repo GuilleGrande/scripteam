@@ -1,0 +1,1181 @@
+openapi: 3.0.3
+info:
+  title: ScripTeam API
+  description: |
+    AI-powered acting practice platform with Spanish/English language support.
+
+    This API provides endpoints for script upload, processing, character detection,
+    voice synthesis, and interactive practice sessions.
+
+    ## Features
+    - Script upload and text extraction (PDF/TXT)
+    - AI-powered character detection and analysis
+    - Voice synthesis with ElevenLabs and Play.HT
+    - Real-time practice session management
+    - Multi-language support (Spanish/English)
+
+    ## Rate Limiting
+    - General API: 100 requests per minute
+    - File uploads: 5 uploads per minute
+    - Rate limit headers included in all responses
+
+    ## Authentication
+    Currently in development. All endpoints use demo user for testing.
+
+  version: '1.0.0'
+  contact:
+    name: ScripTeam Development Team
+    url: https://scripteam.bigapps.dev
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+servers:
+  - url: http://localhost:3001
+    description: Local development server
+  - url: https://api.scripteam.bigapps.dev
+    description: Production server
+  - url: https://staging.api.scripteam.bigapps.dev
+    description: Staging server
+
+paths:
+  /health:
+    get:
+      summary: Health check endpoint
+      description: Returns API health status and timestamp
+      tags:
+        - System
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "ok"
+                  timestamp:
+                    type: string
+                    format: date-time
+                    example: "2025-09-27T10:30:00.000Z"
+
+  /api/scripts:
+    post:
+      summary: Upload and process script
+      description: |
+        Upload a script file (PDF or TXT) for processing. The API will:
+        1. Extract text from the file
+        2. Store the file securely
+        3. Start async processing (language detection, character analysis)
+
+        **Rate Limited**: 5 uploads per minute per IP
+      tags:
+        - Scripts
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Script file (PDF or TXT, max 10MB)
+                title:
+                  type: string
+                  description: Optional script title (defaults to filename)
+                  example: "Romeo and Juliet - Act 1"
+                expectedLanguage:
+                  type: string
+                  enum: [es, en, auto]
+                  description: Expected script language
+                  default: auto
+            encoding:
+              file:
+                contentType: application/pdf, text/plain
+      responses:
+        '201':
+          description: Script uploaded successfully
+          headers:
+            X-RateLimit-Limit:
+              description: Maximum uploads per window
+              schema:
+                type: integer
+                example: 5
+            X-RateLimit-Remaining:
+              description: Uploads remaining in current window
+              schema:
+                type: integer
+                example: 4
+            X-RateLimit-Reset:
+              description: Time when rate limit resets
+              schema:
+                type: string
+                format: date-time
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScriptUploadResponse'
+        '400':
+          description: Bad request - invalid file or parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+              examples:
+                no_file:
+                  summary: No file uploaded
+                  value:
+                    error: "No file uploaded"
+                    message: "Please upload a PDF or TXT file"
+                invalid_file:
+                  summary: Invalid file type
+                  value:
+                    error: "Invalid file"
+                    message: "Only PDF and TXT files are allowed"
+        '413':
+          description: File too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error: "File too large"
+                message: "File size must be less than 10MB"
+        '422':
+          description: Unprocessable entity - empty or corrupted file
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error: "Empty or corrupted file"
+                message: "Could not extract readable text from the file"
+        '429':
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:
+              description: Maximum uploads per window
+              schema:
+                type: integer
+                example: 5
+            X-RateLimit-Remaining:
+              description: Uploads remaining (0 when rate limited)
+              schema:
+                type: integer
+                example: 0
+            X-RateLimit-Reset:
+              description: Time when rate limit resets
+              schema:
+                type: string
+                format: date-time
+            Retry-After:
+              description: Seconds to wait before retrying
+              schema:
+                type: integer
+                example: 45
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RateLimitError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+    get:
+      summary: Get user's scripts
+      description: |
+        Retrieve all scripts for the current user.
+
+        **Note**: Currently uses demo user ID for testing
+      tags:
+        - Scripts
+      parameters:
+        - name: userId
+          in: query
+          description: User ID (temporary parameter for testing)
+          schema:
+            type: string
+            format: uuid
+            default: "00000000-0000-4000-8000-000000000001"
+      responses:
+        '200':
+          description: List of user scripts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Script'
+        '500':
+          description: Failed to retrieve scripts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/scripts/{scriptId}:
+    get:
+      summary: Get script details
+      description: |
+        Retrieve detailed information about a specific script, including:
+        - Processing status
+        - Extracted text
+        - Character information (if processing complete)
+        - File metadata
+      tags:
+        - Scripts
+      parameters:
+        - name: scriptId
+          in: path
+          required: true
+          description: Unique script identifier
+          schema:
+            type: string
+            format: uuid
+            example: "123e4567-e89b-12d3-a456-426614174000"
+      responses:
+        '200':
+          description: Script details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Script'
+        '404':
+          description: Script not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error: "Script not found"
+        '500':
+          description: Failed to retrieve script
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/scripts/{scriptId}/characters:
+    get:
+      summary: Get detected characters
+      description: |
+        Retrieve AI-detected characters from the script with personality profiles
+        and voice settings.
+
+        **Status**: Planned for Story 2.2 implementation
+      tags:
+        - Characters
+      parameters:
+        - name: scriptId
+          in: path
+          required: true
+          description: Unique script identifier
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of detected characters
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Character'
+        '404':
+          description: Script not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '501':
+          description: Not implemented yet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error: "Feature not implemented"
+                message: "Character detection is planned for Story 2.2"
+
+  /api/scripts/{scriptId}/scenes:
+    get:
+      summary: Get script scenes
+      description: |
+        Retrieve scene breakdown with dialogue lines and stage directions.
+
+        **Status**: Planned for Story 2.2 implementation
+      tags:
+        - Scenes
+      parameters:
+        - name: scriptId
+          in: path
+          required: true
+          description: Unique script identifier
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of scenes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Scene'
+        '404':
+          description: Script not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '501':
+          description: Not implemented yet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/scripts/{scriptId}/voices:
+    post:
+      summary: Generate character voices
+      description: |
+        Generate AI voices for all characters in the script using ElevenLabs
+        or Play.HT. Voices are cached for future use.
+
+        **Status**: Planned for Story 2.3 implementation
+      tags:
+        - Voices
+      parameters:
+        - name: scriptId
+          in: path
+          required: true
+          description: Unique script identifier
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                provider:
+                  type: string
+                  enum: [elevenlabs, playht, auto]
+                  default: auto
+                  description: Voice synthesis provider preference
+                voiceSettings:
+                  $ref: '#/components/schemas/VoiceGenerationSettings'
+      responses:
+        '201':
+          description: Voice generation started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  workflowId:
+                    type: string
+                    format: uuid
+                    description: ID to track voice generation progress
+                  estimatedDuration:
+                    type: integer
+                    description: Estimated completion time in seconds
+                    example: 45
+        '404':
+          description: Script not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '501':
+          description: Not implemented yet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/voices/{characterId}/preview:
+    get:
+      summary: Get character voice preview
+      description: |
+        Retrieve a short audio sample of the character's voice for preview.
+
+        **Status**: Planned for Story 2.3 implementation
+      tags:
+        - Voices
+      parameters:
+        - name: characterId
+          in: path
+          required: true
+          description: Unique character identifier
+          schema:
+            type: string
+            format: uuid
+        - name: text
+          in: query
+          description: Text to synthesize (defaults to sample dialogue)
+          schema:
+            type: string
+            maxLength: 200
+            example: "Hello, this is a sample of my voice."
+      responses:
+        '200':
+          description: Audio preview file
+          content:
+            audio/mpeg:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Character not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '501':
+          description: Not implemented yet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+  /api/scripts/{scriptId}/practice:
+    post:
+      summary: Start practice session
+      description: |
+        Start an interactive practice session with AI-generated character voices.
+
+        **Status**: Planned for Story 2.4 implementation
+      tags:
+        - Practice
+      parameters:
+        - name: scriptId
+          in: path
+          required: true
+          description: Unique script identifier
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PracticeSessionRequest'
+      responses:
+        '201':
+          description: Practice session started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PracticeSessionResponse'
+        '404':
+          description: Script not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '501':
+          description: Not implemented yet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+
+components:
+  schemas:
+    # Response Schemas
+    ScriptUploadResponse:
+      type: object
+      required:
+        - id
+        - title
+        - processingStatus
+        - uploadedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique script identifier
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        title:
+          type: string
+          description: Script title
+          example: "Romeo and Juliet - Act 1"
+        processingStatus:
+          $ref: '#/components/schemas/ProcessingStatus'
+        uploadedAt:
+          type: string
+          format: date-time
+          description: Upload timestamp
+          example: "2025-09-27T10:30:00.000Z"
+        fileMetadata:
+          $ref: '#/components/schemas/FileMetadata'
+
+    Script:
+      type: object
+      required:
+        - id
+        - userId
+        - title
+        - originalText
+        - detectedLanguage
+        - primaryLanguage
+        - characters
+        - uploadedAt
+        - processingStatus
+        - fileMetadata
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique script identifier
+        userId:
+          type: string
+          format: uuid
+          description: Owner user ID
+        title:
+          type: string
+          description: Script title
+          example: "Romeo and Juliet - Act 1"
+        originalText:
+          type: string
+          description: Extracted text from uploaded file
+        detectedLanguage:
+          type: string
+          enum: [es, en, mixed, unknown]
+          description: AI-detected language
+        primaryLanguage:
+          type: string
+          enum: [es, en]
+          description: Primary language for processing
+        processedContent:
+          $ref: '#/components/schemas/ProcessedScript'
+        characters:
+          type: array
+          items:
+            $ref: '#/components/schemas/Character'
+          description: Detected characters (empty until processing complete)
+        uploadedAt:
+          type: string
+          format: date-time
+          description: Upload timestamp
+        processingStatus:
+          $ref: '#/components/schemas/ProcessingStatus'
+        fileMetadata:
+          $ref: '#/components/schemas/FileMetadata'
+
+    Character:
+      type: object
+      required:
+        - id
+        - scriptId
+        - name
+        - aiProfile
+        - voiceSettings
+        - relationships
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique character identifier
+        scriptId:
+          type: string
+          format: uuid
+          description: Parent script ID
+        name:
+          type: string
+          description: Character name
+          example: "Romeo"
+        aiProfile:
+          $ref: '#/components/schemas/CharacterProfile'
+        voiceSettings:
+          $ref: '#/components/schemas/VoiceProfile'
+        avatar:
+          $ref: '#/components/schemas/CharacterAvatar'
+        relationships:
+          type: array
+          items:
+            $ref: '#/components/schemas/CharacterRelationship'
+
+    Scene:
+      type: object
+      required:
+        - id
+        - title
+        - startLine
+        - endLine
+        - characters
+        - dialogue
+        - stageDirections
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique scene identifier
+        title:
+          type: string
+          description: Scene title
+          example: "Act 1, Scene 1"
+        startLine:
+          type: integer
+          description: Starting line number in script
+          minimum: 1
+        endLine:
+          type: integer
+          description: Ending line number in script
+          minimum: 1
+        characters:
+          type: array
+          items:
+            type: string
+          description: Characters present in this scene
+          example: ["Romeo", "Juliet"]
+        dialogue:
+          type: array
+          items:
+            $ref: '#/components/schemas/DialogueLine'
+        stageDirections:
+          type: array
+          items:
+            type: string
+          description: Stage directions for the scene
+
+    ProcessedScript:
+      type: object
+      required:
+        - scenes
+        - relationships
+        - emotionalContext
+        - practiceMetadata
+      properties:
+        scenes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Scene'
+        relationships:
+          type: array
+          items:
+            $ref: '#/components/schemas/CharacterRelationship'
+        emotionalContext:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmotionalContext'
+        practiceMetadata:
+          type: object
+          properties:
+            estimatedDuration:
+              type: integer
+              description: Estimated practice duration in minutes
+            difficultyLevel:
+              type: number
+              minimum: 1
+              maximum: 10
+              description: Script difficulty rating
+            recommendedSkillLevel:
+              type: string
+              enum: [beginner, intermediate, advanced]
+            languageComplexity:
+              type: number
+              minimum: 1
+              maximum: 10
+              description: Language complexity rating
+
+    CharacterProfile:
+      type: object
+      required:
+        - personality
+        - age
+        - gender
+        - emotionalRange
+        - speakingStyle
+        - relationships
+        - motivations
+      properties:
+        personality:
+          type: array
+          items:
+            type: string
+          description: Personality traits
+          example: ["passionate", "impulsive", "romantic"]
+        age:
+          type: string
+          description: Character age or age range
+          example: "young adult"
+        gender:
+          type: string
+          description: Character gender
+          example: "male"
+        emotionalRange:
+          type: array
+          items:
+            type: string
+          description: Emotional range and expressions
+          example: ["love", "anger", "despair"]
+        speakingStyle:
+          type: string
+          description: How the character speaks
+          example: "poetic, formal, passionate"
+        relationships:
+          type: string
+          description: Key relationships
+          example: "lover of Juliet, friend of Mercutio"
+        motivations:
+          type: array
+          items:
+            type: string
+          description: Character motivations
+          example: ["love", "family honor", "adventure"]
+        culturalContext:
+          type: string
+          description: Cultural background
+          example: "Renaissance Italian nobility"
+
+    VoiceProfile:
+      type: object
+      required:
+        - language
+        - region
+        - characteristics
+        - generatedAt
+        - audioSamples
+      properties:
+        elevenLabsVoiceId:
+          type: string
+          description: ElevenLabs voice ID if generated
+          example: "EXAVITQu4vr4xnSDxMaL"
+        playHtVoiceId:
+          type: string
+          description: Play.HT voice ID if generated
+          example: "female-en-us-1"
+        language:
+          type: string
+          enum: [es, en]
+          description: Voice language
+        region:
+          type: string
+          enum: [spain, mexico, us, uk]
+          description: Regional accent
+        characteristics:
+          type: object
+          required:
+            - age
+            - gender
+            - tone
+            - pace
+          properties:
+            age:
+              type: string
+              enum: [young, middle, older]
+            gender:
+              type: string
+              enum: [male, female, neutral]
+            tone:
+              type: string
+              enum: [authoritative, gentle, energetic, melancholic, neutral]
+            pace:
+              type: string
+              enum: [slow, normal, fast]
+        generatedAt:
+          type: string
+          format: date-time
+          description: When voice was generated
+        audioSamples:
+          type: array
+          items:
+            $ref: '#/components/schemas/AudioSample'
+
+    CharacterAvatar:
+      type: object
+      required:
+        - imageUrl
+        - style
+        - generatedAt
+        - prompt
+      properties:
+        imageUrl:
+          type: string
+          format: uri
+          description: Avatar image URL
+        style:
+          type: string
+          enum: [realistic, artistic, minimal]
+          description: Avatar artistic style
+        culturalStyle:
+          type: string
+          enum: [spanish, english, neutral]
+          description: Cultural representation style
+        generatedAt:
+          type: string
+          format: date-time
+          description: When avatar was generated
+        prompt:
+          type: string
+          description: AI prompt used for generation
+
+    AudioSample:
+      type: object
+      required:
+        - id
+        - url
+        - text
+        - language
+        - duration
+        - cached
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique audio sample ID
+        url:
+          type: string
+          format: uri
+          description: Audio file URL
+        text:
+          type: string
+          description: Text that was synthesized
+        language:
+          type: string
+          enum: [es, en]
+          description: Audio language
+        duration:
+          type: number
+          description: Audio duration in seconds
+        sceneId:
+          type: string
+          format: uuid
+          description: Scene ID if sample is from specific scene
+        cached:
+          type: boolean
+          description: Whether audio is cached for offline use
+
+    DialogueLine:
+      type: object
+      required:
+        - id
+        - character
+        - text
+        - lineNumber
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique dialogue line ID
+        character:
+          type: string
+          description: Speaking character name
+          example: "Romeo"
+        text:
+          type: string
+          description: Dialogue text
+          example: "But soft, what light through yonder window breaks?"
+        lineNumber:
+          type: integer
+          description: Line number in original script
+          minimum: 1
+        emotionalTone:
+          type: string
+          description: Emotional tone for delivery
+          example: "wonder, love"
+        stagingNotes:
+          type: string
+          description: Stage direction notes
+          example: "looking up at balcony"
+        languageNotes:
+          type: string
+          description: Language or pronunciation notes
+
+    CharacterRelationship:
+      type: object
+      required:
+        - fromCharacter
+        - toCharacter
+        - relationshipType
+        - description
+      properties:
+        fromCharacter:
+          type: string
+          description: Source character name
+        toCharacter:
+          type: string
+          description: Target character name
+        relationshipType:
+          type: string
+          description: Type of relationship
+          example: "romantic"
+        description:
+          type: string
+          description: Relationship description
+          example: "star-crossed lovers"
+
+    EmotionalContext:
+      type: object
+      required:
+        - sceneId
+        - overallTone
+        - tensions
+        - emotionalArc
+      properties:
+        sceneId:
+          type: string
+          format: uuid
+          description: Scene ID
+        overallTone:
+          type: string
+          description: Overall emotional tone
+          example: "romantic tension"
+        tensions:
+          type: array
+          items:
+            type: string
+          description: Emotional tensions present
+          example: ["family feud", "forbidden love"]
+        emotionalArc:
+          type: string
+          description: How emotions develop in scene
+          example: "hope to despair to determination"
+
+    FileMetadata:
+      type: object
+      required:
+        - originalName
+        - size
+        - mimeType
+        - uploadedAt
+      properties:
+        originalName:
+          type: string
+          description: Original filename
+          example: "romeo_juliet_act1.pdf"
+        size:
+          type: integer
+          description: File size in bytes
+          example: 2485760
+        mimeType:
+          type: string
+          description: MIME type
+          example: "application/pdf"
+        uploadedAt:
+          type: string
+          format: date-time
+          description: Upload timestamp
+
+    ProcessingStatus:
+      type: string
+      enum:
+        - uploading
+        - analyzing
+        - language_detection
+        - generating_voices
+        - generating_avatars
+        - complete
+        - error
+      description: Current processing status
+      example: "analyzing"
+
+    # Request Schemas
+    VoiceGenerationSettings:
+      type: object
+      properties:
+        region:
+          type: string
+          enum: [spain, mexico, us, uk]
+          description: Preferred regional accent
+        quality:
+          type: string
+          enum: [standard, premium]
+          default: standard
+          description: Voice quality level
+        cacheAudio:
+          type: boolean
+          default: true
+          description: Whether to cache generated audio
+
+    PracticeSessionRequest:
+      type: object
+      required:
+        - sceneId
+        - userCharacter
+        - familiarityLevel
+      properties:
+        sceneId:
+          type: string
+          format: uuid
+          description: Scene to practice
+        userCharacter:
+          type: string
+          description: Character user will play
+          example: "Romeo"
+        familiarityLevel:
+          type: string
+          enum: [first_read, know_some_lines, know_most_lines, know_all_lines]
+          description: User's familiarity with the script
+        practiceMode:
+          type: string
+          enum: [guided, freeform, memorization]
+          default: guided
+          description: Practice session mode
+        voiceSettings:
+          type: object
+          properties:
+            playbackSpeed:
+              type: number
+              minimum: 0.5
+              maximum: 2.0
+              default: 1.0
+              description: Voice playback speed multiplier
+            volume:
+              type: number
+              minimum: 0.0
+              maximum: 1.0
+              default: 0.8
+              description: Voice volume level
+
+    PracticeSessionResponse:
+      type: object
+      required:
+        - sessionId
+        - sceneData
+        - userCharacter
+        - otherCharacters
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+          description: Unique session identifier
+        sceneData:
+          $ref: '#/components/schemas/Scene'
+        userCharacter:
+          type: string
+          description: Character user is playing
+        otherCharacters:
+          type: array
+          items:
+            $ref: '#/components/schemas/Character'
+          description: AI characters in the scene
+        practiceSettings:
+          type: object
+          properties:
+            cuingEnabled:
+              type: boolean
+              description: Whether AI will provide cues
+            feedbackEnabled:
+              type: boolean
+              description: Whether performance feedback is enabled
+
+    # Error Schemas
+    ApiError:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error type
+          example: "Script not found"
+        message:
+          type: string
+          description: Human-readable error message
+          example: "The requested script could not be found"
+        code:
+          type: string
+          description: Error code for programmatic handling
+          example: "SCRIPT_NOT_FOUND"
+        details:
+          type: object
+          description: Additional error details
+        timestamp:
+          type: string
+          format: date-time
+          description: Error timestamp
+        requestId:
+          type: string
+          description: Request ID for debugging
+
+    ValidationError:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Error type
+          example: "Invalid request data"
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                description: Field with validation error
+              message:
+                type: string
+                description: Validation error message
+              code:
+                type: string
+                description: Validation error code
+
+    RateLimitError:
+      type: object
+      required:
+        - error
+        - message
+        - retryAfter
+      properties:
+        error:
+          type: string
+          example: "Too many requests"
+        message:
+          type: string
+          example: "Rate limit exceeded. Try again in 45 seconds."
+        retryAfter:
+          type: integer
+          description: Seconds to wait before retrying
+          example: 45
+
+  securitySchemes:
+    # Future authentication schemes
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token authentication (planned)
+
+# Security (currently not implemented)
+# security:
+#   - BearerAuth: []
+
+tags:
+  - name: System
+    description: System health and status endpoints
+  - name: Scripts
+    description: Script upload, processing, and management
+  - name: Characters
+    description: AI character detection and analysis
+  - name: Scenes
+    description: Script scene breakdown and analysis
+  - name: Voices
+    description: AI voice synthesis and audio generation
+  - name: Practice
+    description: Interactive practice sessions
+
+externalDocs:
+  description: ScripTeam Documentation
+  url: https://docs.scripteam.bigapps.dev

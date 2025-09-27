@@ -1,12 +1,17 @@
-# Epic 1 AI Voice Proof of Concept & Core Value Validation
+# Epic 1: Web PoC - Core AI Voice Value Validation
 
-**Epic Goal:** Deliver immediate AI voice value with minimal script upload, basic character detection, and voice synthesis to validate core hypothesis and competitive differentiation within 4-6 weeks.
+**Epic Goal:** Deliver immediate AI voice value through web-based PoC with script upload, character detection, and voice synthesis to validate core hypothesis before mobile investment within 2-4 weeks.
 
-This epic focuses on building the minimal viable AI functionality to prove that character-specific voice synthesis creates sufficient value to justify the product concept. Success means actors can upload a script, select their character, and immediately experience AI scene partners with distinct voices.
+## Phase 1 Strategy
+This epic represents Phase 1 of the two-phase architecture strategy:
+- **Phase 1:** React Web PoC for immediate validation
+- **Phase 2:** Flutter migration for mobile single-codebase (Epic 3)
+
+Success criteria focus on proving core value proposition through web interface before mobile investment.
 
 ## Story 1.1 Basic Script Upload and Text Processing
 As a drama student,
-I want to upload a script file (PDF or text),
+I want to upload a script file (PDF or text) through a web interface,
 so that I can start practicing with AI scene partners.
 
 **Acceptance Criteria**
@@ -15,6 +20,8 @@ so that I can start practicing with AI scene partners.
 3. Uploaded text is stored securely and displayed for user confirmation
 4. Basic error handling for unsupported file types or corrupted uploads
 5. File size limit of 10MB to prevent infrastructure overload during MVP
+
+**Status:** ✅ COMPLETE
 
 ## Story 1.2 AI Character Detection and Parsing
 As a drama student,
@@ -28,6 +35,8 @@ so that I don't have to manually configure scene partners.
 4. Handles common script formatting variations (character names in CAPS, colons, etc.)
 5. Extracts basic emotional context from stage directions for voice calibration
 
+**Status:** 📋 PLANNED (Story 2.2)
+
 ## Story 1.3 Character-Specific AI Voice Generation
 As a drama student,
 I want to select my character and hear other characters with distinct AI voices,
@@ -40,9 +49,11 @@ so that I can practice scenes with realistic scene partners.
 4. Voice synthesis response time under 3 seconds for acceptable practice flow
 5. Fallback to Play.HT API if ElevenLabs fails or reaches rate limits
 
-## Story 1.4 Pre-processed Scene Practice with Instant Audio Playback
+**Status:** 📋 PLANNED (Story 2.3)
+
+## Story 1.4 Web-Based Scene Practice with Instant Audio Playback
 As a drama student,
-I want to practice scenes with immediate AI character responses,
+I want to practice scenes with immediate AI character responses through my web browser,
 so that I can rehearse dialogue timing without interruption or loading delays.
 
 **Acceptance Criteria**
@@ -53,9 +64,11 @@ so that I can rehearse dialogue timing without interruption or loading delays.
 5. Session flow is uninterrupted - no waiting for real-time synthesis during practice
 6. User can navigate freely within scene (jump to specific lines) with instant audio availability
 
-## Story 1.5 MVP Web Interface and Basic User Experience
+**Status:** 📋 PLANNED (Story 2.4)
+
+## Story 1.5 Web Interface and User Experience
 As a drama student,
-I want a simple, functional interface to access all core features,
+I want a simple, functional web interface to access all core features,
 so that I can quickly start practicing without technical barriers.
 
 **Acceptance Criteria**
@@ -64,3 +77,25 @@ so that I can quickly start practicing without technical barriers.
 3. Progress indication during AI processing steps (parsing, voice generation, caching)
 4. Error messages are user-friendly and actionable
 5. Interface loads and responds within 2 seconds for good user experience
+
+**Status:** ✅ COMPLETE (Story 2.1)
+
+## Epic Success Criteria
+- [ ] Complete script-to-practice workflow functional via web browser
+- [ ] AI voice generation working for all character types
+- [ ] Scene practice playable end-to-end
+- [ ] Cross-browser compatibility (Chrome, Firefox, Safari, Edge)
+- [ ] User feedback collected on core value proposition
+- [ ] Technical foundation ready for mobile migration (Epic 3)
+
+## Dependencies
+- None (foundational epic)
+
+## Risks & Mitigation
+- **Risk:** ElevenLabs API limitations
+- **Mitigation:** Play.HT fallback implementation
+- **Risk:** Web performance with large scripts
+- **Mitigation:** Progressive loading and caching strategy
+
+---
+*Updated for Phase 1 Web PoC Strategy - ADR-002*
