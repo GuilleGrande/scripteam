@@ -45,7 +45,9 @@
       "Bash(xargs cat:*)",
       "Bash(git add:*)",
       "Bash(./test-docker-setup.sh:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(npm run lint)",
+      "Bash(npm run lint:*)"
     ],
     "deny": [],
     "ask": []
